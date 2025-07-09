@@ -3,7 +3,7 @@
 /**
  * Plugin Name: Plugincy Product Analytics Pro
  * Description: Advanced product analytics and tracking system with REST API
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: plugincy
  * Author URI: https://plugincy.com
  * Text Domain: plugincy-product-analytics-pro
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('PAP_VERSION', '1.0.1');
+define('PAP_VERSION', '1.0.2');
 define('PAP_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PAP_PLUGIN_URL', plugin_dir_url(__FILE__));
 
