@@ -256,34 +256,39 @@ class ProductAnalyticsPro_dashboard
             $order_clause = "ORDER BY $order_by $order";
         }
 
-        // Get total count for pagination
-        $total_query = "SELECT COUNT(*) FROM {$wpdb->prefix}pap_analytics $where_clause";
-        $total_sites = $wpdb->get_var($wpdb->prepare($total_query, $where_params));
-
-        // Get sites with pagination
-        $sites_query = "
-        SELECT * FROM {$wpdb->prefix}pap_analytics 
-        $where_clause 
-        $order_clause
-        LIMIT %d OFFSET %d
-    ";
-
-        $sites_params = array_merge($where_params, [$per_page, $offset]);
-        $sites = $wpdb->get_results($wpdb->prepare($sites_query, $sites_params));
+        // Get ALL sites matching the base criteria (without pagination)
+        $all_sites_query = "SELECT * FROM {$wpdb->prefix}pap_analytics $where_clause $order_clause";
+        $all_sites = $wpdb->get_results($wpdb->prepare($all_sites_query, $where_params));
 
         // Filter sites based on tab (own vs client)
         $settings = new ProductAnalyticsPro_settings();
         $filtered_sites = [];
 
-        foreach ($sites as $site) {
+        foreach ($all_sites as $site) {
             $is_own = $settings->is_own_site($site->site_url);
             if (($tab === 'own' && $is_own) || ($tab === 'client' && !$is_own)) {
                 $filtered_sites[] = $site;
             }
         }
 
-        // Calculate pagination
-        $total_pages = ceil($total_sites / $per_page);
+        // Calculate pagination based on filtered results
+        $total_filtered_sites = count($filtered_sites);
+        $total_pages = ceil($total_filtered_sites / $per_page);
+
+        // Apply pagination to filtered results
+        $paginated_sites = array_slice($filtered_sites, $offset, $per_page);
+
+        // Get counts for tab labels
+        $own_count = 0;
+        $client_count = 0;
+        foreach ($all_sites as $site) {
+            $is_own = $settings->is_own_site($site->site_url);
+            if ($is_own) {
+                $own_count++;
+            } else {
+                $client_count++;
+            }
+        }
 
     ?>
         <div class="pap-sites-container">
@@ -291,11 +296,11 @@ class ProductAnalyticsPro_dashboard
             <div class="pap-tab-nav">
                 <a href="<?php echo esc_url(add_query_arg(['site_tab' => 'own', 'paged' => 1])); ?>"
                     class="pap-tab-link <?php echo $tab === 'own' ? 'active' : ''; ?>">
-                    Own Sites
+                    Own Sites (<?php echo $own_count; ?>)
                 </a>
                 <a href="<?php echo esc_url(add_query_arg(['site_tab' => 'client', 'paged' => 1])); ?>"
                     class="pap-tab-link <?php echo $tab === 'client' ? 'active' : ''; ?>">
-                    Client Sites
+                    Client Sites (<?php echo $client_count; ?>)
                 </a>
             </div>
 
@@ -398,17 +403,17 @@ class ProductAnalyticsPro_dashboard
                         </tr>
                     </thead>
                     <tbody>
-                        <?php if (empty($filtered_sites)): ?>
+                        <?php if (empty($paginated_sites)): ?>
                             <tr>
                                 <td colspan="8" class="pap-no-results">
                                     <?php echo empty($search) ? 'No sites found.' : 'No sites found matching your search.'; ?>
                                 </td>
                             </tr>
                         <?php else: ?>
-                            <?php foreach ($filtered_sites as $site): ?>
+                            <?php foreach ($paginated_sites as $site): ?>
                                 <tr>
                                     <td>
-                                        <a href="<?php echo esc_url($site->site_url); ?>" target="_blank" style=" color: unset; text-decoration: none; "><?php echo esc_html($site->site_url); ?></a>
+                                        <a href="<?php echo esc_url($site->site_url); ?>" target="_blank" style="color: unset; text-decoration: none;"><?php echo esc_html($site->site_url); ?></a>
                                         <?php if ($site->using_pro): ?>
                                             <span class="pap-pro-badge">PRO</span>
                                         <?php endif; ?>
@@ -445,7 +450,7 @@ class ProductAnalyticsPro_dashboard
 
                     <span class="pap-pagination-info">
                         Page <?php echo $current_page; ?> of <?php echo $total_pages; ?>
-                        (<?php echo $total_sites; ?> total sites)
+                        (<?php echo $total_filtered_sites; ?> <?php echo $tab; ?> sites)
                     </span>
 
                     <?php if ($current_page < $total_pages): ?>
