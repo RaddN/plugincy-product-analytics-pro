@@ -13,15 +13,13 @@ class ProductAnalyticsPro_dashboard
         add_action('init', array($this, 'init'));
         $this->pap_db_calls = new ProductAnalyticsPro_db();
         $this->help = new ProductAnalyticsPro_help();
-
-        
     }
 
     public function init()
     {
         // Initialize plugin
     }
-    
+
     public function product_dashboard_page()
     {
         $product_id = filter_input(INPUT_GET, 'product_id', FILTER_SANITIZE_STRING);
@@ -35,8 +33,8 @@ class ProductAnalyticsPro_dashboard
         if (!$product) {
             wp_die('Product not found');
         }
-        $current_tab = filter_input(INPUT_GET, 'tab', FILTER_SANITIZE_STRING)??'dashboard';
-    ?>
+        $current_tab = filter_input(INPUT_GET, 'tab', FILTER_SANITIZE_STRING) ?? 'dashboard';
+?>
         <div class="wrap pap-wrap">
             <div class="pap-header">
                 <h1 class="pap-title"><?php echo esc_html($product->product_name); ?> Analytics</h1>
@@ -172,7 +170,7 @@ class ProductAnalyticsPro_dashboard
                     <h3>Server Software</h3>
                     <canvas id="serverChart"></canvas>
                 </div>
-                
+
                 <div class="pap-chart-card">
                     <h3>Deactivation Reasons</h3>
                     <canvas id="deactivationChart"></canvas>
@@ -217,50 +215,367 @@ class ProductAnalyticsPro_dashboard
     private function render_sites_tab($product_id)
     {
         global $wpdb;
-        $sites = $wpdb->get_results($wpdb->prepare("
-            SELECT * FROM {$wpdb->prefix}pap_analytics 
-            WHERE product_id = %s 
-            ORDER BY last_seen DESC
-        ", $product_id));
+
+        // Get current page, search, and order parameters
+        $current_page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
+        $search = isset($_GET['search']) ? sanitize_text_field($_GET['search']) : '';
+        $order_by = isset($_GET['orderby']) ? sanitize_text_field($_GET['orderby']) : 'last_seen';
+        $order = isset($_GET['order']) ? sanitize_text_field($_GET['order']) : 'DESC';
+        $tab = isset($_GET['site_tab']) ? sanitize_text_field($_GET['site_tab']) : 'client';
+
+        // Validate order_by parameter
+        $valid_order_by = ['status', 'multisite', 'wp_version', 'php_version', 'days_active', 'last_seen'];
+        if (!in_array($order_by, $valid_order_by)) {
+            $order_by = 'last_seen';
+        }
+
+        // Validate order parameter
+        $order = strtoupper($order) === 'ASC' ? 'ASC' : 'DESC';
+
+        $per_page = 20;
+        $offset = ($current_page - 1) * $per_page;
+
+        // Build WHERE clause
+        $where_conditions = ["product_id = %s"];
+        $where_params = [$product_id];
+
+        if (!empty($search)) {
+            $where_conditions[] = "site_url LIKE %s";
+            $where_params[] = '%' . $wpdb->esc_like($search) . '%';
+        }
+
+        $where_clause = 'WHERE ' . implode(' AND ', $where_conditions);
+
+        // Special handling for days_active ordering
+        if ($order_by === 'days_active') {
+            $order_clause = "ORDER BY (CASE 
+            WHEN deactivation_date IS NULL THEN DATEDIFF(NOW(), activation_date)
+            ELSE DATEDIFF(deactivation_date, activation_date)
+        END) $order";
+        } else {
+            $order_clause = "ORDER BY $order_by $order";
+        }
+
+        // Get total count for pagination
+        $total_query = "SELECT COUNT(*) FROM {$wpdb->prefix}pap_analytics $where_clause";
+        $total_sites = $wpdb->get_var($wpdb->prepare($total_query, $where_params));
+
+        // Get sites with pagination
+        $sites_query = "
+        SELECT * FROM {$wpdb->prefix}pap_analytics 
+        $where_clause 
+        $order_clause
+        LIMIT %d OFFSET %d
+    ";
+
+        $sites_params = array_merge($where_params, [$per_page, $offset]);
+        $sites = $wpdb->get_results($wpdb->prepare($sites_query, $sites_params));
+
+        // Filter sites based on tab (own vs client)
+        $settings = new ProductAnalyticsPro_settings();
+        $filtered_sites = [];
+
+        foreach ($sites as $site) {
+            $is_own = $settings->is_own_site($site->site_url);
+            if (($tab === 'own' && $is_own) || ($tab === 'client' && !$is_own)) {
+                $filtered_sites[] = $site;
+            }
+        }
+
+        // Calculate pagination
+        $total_pages = ceil($total_sites / $per_page);
+
     ?>
-        <div class="pap-sites-table">
-            <table class="pap-table">
-                <thead>
-                    <tr>
-                        <th>Site URL</th>
-                        <th>Status</th>
-                        <th>Multisite</th>
-                        <th>WordPress</th>
-                        <th>PHP</th>
-                        <th>Days Active</th>
-                        <th>Pro</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($sites as $site): ?>
+        <div class="pap-sites-container">
+            <!-- Tab Navigation -->
+            <div class="pap-tab-nav">
+                <a href="<?php echo esc_url(add_query_arg(['site_tab' => 'own', 'paged' => 1])); ?>"
+                    class="pap-tab-link <?php echo $tab === 'own' ? 'active' : ''; ?>">
+                    Own Sites
+                </a>
+                <a href="<?php echo esc_url(add_query_arg(['site_tab' => 'client', 'paged' => 1])); ?>"
+                    class="pap-tab-link <?php echo $tab === 'client' ? 'active' : ''; ?>">
+                    Client Sites
+                </a>
+            </div>
+
+            <!-- Search and Controls -->
+            <div class="pap-table-controls">
+                <form method="get" class="pap-search-form">
+                    <input type="hidden" name="page" value="<?php echo esc_attr($_GET['page'] ?? ''); ?>" />
+                    <input type="hidden" name="tab" value="<?php echo esc_attr($_GET['tab'] ?? ''); ?>" />
+                    <input type="hidden" name="product_id" value="<?php echo esc_attr($product_id); ?>" />
+                    <input type="hidden" name="site_tab" value="<?php echo esc_attr($tab); ?>" />
+                    <input type="search" name="search" placeholder="Search by website URL..."
+                        value="<?php echo esc_attr($search); ?>" />
+                    <button type="submit" class="pap-btn pap-btn-primary">Search</button>
+                    <?php if (!empty($search)): ?>
+                        <a href="<?php echo esc_url(remove_query_arg(['search', 'paged'])); ?>"
+                            class="pap-btn pap-btn-secondary">Clear</a>
+                    <?php endif; ?>
+                </form>
+            </div>
+
+            <!-- Sites Table -->
+            <div class="pap-sites-table">
+                <table class="pap-table">
+                    <thead>
                         <tr>
-                            <td><?php echo esc_html($site->site_url); ?></td>
-                            <td>
-                                <span class="pap-status pap-status-<?php echo esc_html($site->status); ?>">
-                                    <?php echo esc_html(ucfirst($site->status)); ?>
-                                </span>
-                            </td>
-                            <td><?php echo $site->multisite ? 'Yes' : 'No'; ?></td>
-                            <td><?php echo esc_html($site->wp_version); ?></td>
-                            <td><?php echo esc_html($site->php_version); ?></td>
-                            <td><?php echo esc_html($this->help->calculate_days_active($site->activation_date, $site->deactivation_date)); ?></td>
-                            <td><?php echo $site->using_pro ? 'Yes' : 'No'; ?></td>
-                            <td>
-                                <button class="pap-btn pap-btn-small pap-view-details" data-site-id="<?php echo esc_html($site->id); ?>">
-                                    View Details
-                                </button>
-                            </td>
+                            <th>
+                                <a href="<?php echo esc_url(add_query_arg([
+                                                'orderby' => 'site_url',
+                                                'order' => ($order_by === 'site_url' && $order === 'ASC') ? 'DESC' : 'ASC',
+                                                'paged' => 1
+                                            ])); ?>">
+                                    Site URL
+                                    <?php if ($order_by === 'site_url'): ?>
+                                        <span class="pap-sort-indicator"><?php echo $order === 'ASC' ? '↑' : '↓'; ?></span>
+                                    <?php endif; ?>
+                                </a>
+                            </th>
+                            <th>
+                                <a href="<?php echo esc_url(add_query_arg([
+                                                'orderby' => 'status',
+                                                'order' => ($order_by === 'status' && $order === 'ASC') ? 'DESC' : 'ASC',
+                                                'paged' => 1
+                                            ])); ?>">
+                                    Status
+                                    <?php if ($order_by === 'status'): ?>
+                                        <span class="pap-sort-indicator"><?php echo $order === 'ASC' ? '↑' : '↓'; ?></span>
+                                    <?php endif; ?>
+                                </a>
+                            </th>
+                            <th>
+                                <a href="<?php echo esc_url(add_query_arg([
+                                                'orderby' => 'multisite',
+                                                'order' => ($order_by === 'multisite' && $order === 'ASC') ? 'DESC' : 'ASC',
+                                                'paged' => 1
+                                            ])); ?>">
+                                    Multisite
+                                    <?php if ($order_by === 'multisite'): ?>
+                                        <span class="pap-sort-indicator"><?php echo $order === 'ASC' ? '↑' : '↓'; ?></span>
+                                    <?php endif; ?>
+                                </a>
+                            </th>
+                            <th>
+                                <a href="<?php echo esc_url(add_query_arg([
+                                                'orderby' => 'wp_version',
+                                                'order' => ($order_by === 'wp_version' && $order === 'ASC') ? 'DESC' : 'ASC',
+                                                'paged' => 1
+                                            ])); ?>">
+                                    WordPress
+                                    <?php if ($order_by === 'wp_version'): ?>
+                                        <span class="pap-sort-indicator"><?php echo $order === 'ASC' ? '↑' : '↓'; ?></span>
+                                    <?php endif; ?>
+                                </a>
+                            </th>
+                            <th>
+                                <a href="<?php echo esc_url(add_query_arg([
+                                                'orderby' => 'php_version',
+                                                'order' => ($order_by === 'php_version' && $order === 'ASC') ? 'DESC' : 'ASC',
+                                                'paged' => 1
+                                            ])); ?>">
+                                    PHP
+                                    <?php if ($order_by === 'php_version'): ?>
+                                        <span class="pap-sort-indicator"><?php echo $order === 'ASC' ? '↑' : '↓'; ?></span>
+                                    <?php endif; ?>
+                                </a>
+                            </th>
+                            <th>
+                                <a href="<?php echo esc_url(add_query_arg([
+                                                'orderby' => 'days_active',
+                                                'order' => ($order_by === 'days_active' && $order === 'ASC') ? 'DESC' : 'ASC',
+                                                'paged' => 1
+                                            ])); ?>">
+                                    Days Active
+                                    <?php if ($order_by === 'days_active'): ?>
+                                        <span class="pap-sort-indicator"><?php echo $order === 'ASC' ? '↑' : '↓'; ?></span>
+                                    <?php endif; ?>
+                                </a>
+                            </th>
+                            <th>Active Theme</th>
+                            <th>Actions</th>
                         </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($filtered_sites)): ?>
+                            <tr>
+                                <td colspan="8" class="pap-no-results">
+                                    <?php echo empty($search) ? 'No sites found.' : 'No sites found matching your search.'; ?>
+                                </td>
+                            </tr>
+                        <?php else: ?>
+                            <?php foreach ($filtered_sites as $site): ?>
+                                <tr>
+                                    <td>
+                                        <a href="<?php echo esc_url($site->site_url); ?>" target="_blank" style=" color: unset; text-decoration: none; "><?php echo esc_html($site->site_url); ?></a>
+                                        <?php if ($site->using_pro): ?>
+                                            <span class="pap-pro-badge">PRO</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <span class="pap-status pap-status-<?php echo esc_html($site->status); ?>">
+                                            <?php echo esc_html(ucfirst($site->status)); ?>
+                                        </span>
+                                    </td>
+                                    <td><?php echo $site->multisite ? 'Yes' : 'No'; ?></td>
+                                    <td><?php echo esc_html($site->wp_version); ?></td>
+                                    <td><?php echo esc_html($site->php_version); ?></td>
+                                    <td><?php echo esc_html($this->help->calculate_days_active($site->activation_date, $site->deactivation_date)); ?></td>
+                                    <td><?php echo esc_html($site->active_theme ?? 'N/A'); ?></td>
+                                    <td>
+                                        <button class="pap-btn pap-btn-small pap-view-details" data-site-id="<?php echo esc_html($site->id); ?>">
+                                            View Details
+                                        </button>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <?php if ($total_pages > 1): ?>
+                <div class="pap-pagination">
+                    <?php if ($current_page > 1): ?>
+                        <a href="<?php echo esc_url(add_query_arg(['paged' => $current_page - 1])); ?>"
+                            class="pap-btn pap-btn-secondary">« Previous</a>
+                    <?php endif; ?>
+
+                    <span class="pap-pagination-info">
+                        Page <?php echo $current_page; ?> of <?php echo $total_pages; ?>
+                        (<?php echo $total_sites; ?> total sites)
+                    </span>
+
+                    <?php if ($current_page < $total_pages): ?>
+                        <a href="<?php echo esc_url(add_query_arg(['paged' => $current_page + 1])); ?>"
+                            class="pap-btn pap-btn-secondary">Next »</a>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
         </div>
+
+        <style>
+            .pap-sites-container {
+                margin-top: 20px;
+            }
+
+            .pap-tab-nav {
+                margin-bottom: 20px;
+                border-bottom: 1px solid #ddd;
+            }
+
+            .pap-tab-link {
+                display: inline-block;
+                padding: 10px 20px;
+                text-decoration: none;
+                color: #666;
+                border-bottom: 2px solid transparent;
+                margin-right: 10px;
+            }
+
+            .pap-tab-link.active {
+                color: #0073aa;
+                border-bottom-color: #0073aa;
+                font-weight: bold;
+            }
+
+            .pap-table-controls {
+                margin-bottom: 20px;
+            }
+
+            .pap-search-form {
+                display: flex;
+                gap: 10px;
+                align-items: center;
+            }
+
+            .pap-search-form input[type="search"] {
+                min-width: 300px;
+                padding: 8px 12px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+
+            .pap-table th a {
+                text-decoration: none;
+                color: #333;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+            }
+
+            .pap-table th a:hover {
+                color: #0073aa;
+            }
+
+            .pap-sort-indicator {
+                font-size: 12px;
+                color: #0073aa;
+            }
+
+            .pap-pro-badge {
+                background: linear-gradient(135deg, #ffd700, #ffb700);
+                color: #333;
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-size: 12px;
+                font-weight: 700;
+                letter-spacing: 0.5px;
+            }
+
+            .pap-no-results {
+                text-align: center;
+                color: #666;
+                font-style: italic;
+                padding: 20px;
+            }
+
+            .pap-pagination {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-top: 20px;
+                padding: 15px 0;
+                border-top: 1px solid #ddd;
+            }
+
+            .pap-pagination-info {
+                color: #666;
+                font-size: 14px;
+            }
+
+            .pap-btn {
+                padding: 8px 16px;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                text-decoration: none;
+                display: inline-block;
+                font-size: 14px;
+            }
+
+            .pap-btn-primary {
+                background: #0073aa;
+                color: white;
+            }
+
+            .pap-btn-secondary {
+                background: #f7f7f7;
+                color: #333;
+                border: 1px solid #ddd;
+            }
+
+            .pap-btn-small {
+                padding: 5px 10px;
+                font-size: 12px;
+            }
+
+            .pap-btn:hover {
+                opacity: 0.9;
+            }
+        </style>
     <?php
     }
 
@@ -354,5 +669,4 @@ class ProductAnalyticsPro_dashboard
         </div>
 <?php
     }
-
 }
