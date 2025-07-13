@@ -212,28 +212,144 @@ class ProductAnalyticsPro_dashboard
     <?php
     }
 
+    private function get_sites_by_date_groups($sites)
+    {
+        $groups = [
+            'today' => [],
+            'yesterday' => [],
+            'dates' => []
+        ];
+
+        $today = date('Y-m-d');
+        $yesterday = date('Y-m-d', strtotime('-1 day'));
+
+        foreach ($sites as $site) {
+            $site_date = date('Y-m-d', strtotime($site->activation_date));
+
+            if ($site_date === $today) {
+                $groups['today'][] = $site;
+            } elseif ($site_date === $yesterday) {
+                $groups['yesterday'][] = $site;
+            } else {
+                if (!isset($groups['dates'][$site_date])) {
+                    $groups['dates'][$site_date] = [];
+                }
+                $groups['dates'][$site_date][] = $site;
+            }
+        }
+
+        // Sort dates in descending order
+        krsort($groups['dates']);
+
+        return $groups;
+    }
+    /**
+     * Get sites filtered by tab type
+     */
+    private function get_filtered_sites_by_tab($all_sites, $tab, $settings)
+    {
+        $filtered_sites = [];
+
+        foreach ($all_sites as $site) {
+            $is_own = $settings->is_own_site($site->site_url);
+            $is_pro = $site->using_pro;
+
+            switch ($tab) {
+                case 'own':
+                    if ($is_own) $filtered_sites[] = $site;
+                    break;
+                case 'client':
+                    if (!$is_own) $filtered_sites[] = $site;
+                    break;
+                case 'pro':
+                    if ($is_pro) $filtered_sites[] = $site;
+                    break;
+                case 'all':
+                default:
+                    $filtered_sites[] = $site;
+                    break;
+            }
+        }
+
+        return $filtered_sites;
+    }
+    /**
+     * Get tab counts
+     */
+    private function get_tab_counts($all_sites, $settings)
+    {
+        $counts = [
+            'all' => count($all_sites),
+            'own' => 0,
+            'client' => 0,
+            'pro' => 0
+        ];
+
+        foreach ($all_sites as $site) {
+            $is_own = $settings->is_own_site($site->site_url);
+            $is_pro = $site->using_pro;
+
+            if ($is_own) $counts['own']++;
+            else $counts['client']++;
+
+            if ($is_pro) $counts['pro']++;
+        }
+
+        return $counts;
+    }
+    /**
+     * Render site row
+     */
+    private function render_site_row($site)
+    {
+    ?>
+        <tr>
+            <td>
+                <a href="<?php echo esc_url($site->site_url); ?>" target="_blank" style="color: unset; text-decoration: none;">
+                    <?php echo esc_html($site->site_url); ?>
+                </a>
+                <?php if ($site->using_pro): ?>
+                    <span class="pap-pro-badge">PRO</span>
+                <?php endif; ?>
+            </td>
+            <td>
+                <span class="pap-status pap-status-<?php echo esc_html($site->status); ?>">
+                    <?php echo esc_html(ucfirst($site->status)); ?>
+                </span>
+            </td>
+            <td><?php echo $site->multisite ? 'Yes' : 'No'; ?></td>
+            <td><?php echo esc_html($site->wp_version); ?></td>
+            <td><?php echo esc_html($site->php_version); ?></td>
+            <td><?php echo esc_html($this->help->calculate_days_active($site->activation_date, $site->deactivation_date)); ?></td>
+            <td><?php echo esc_html($site->active_theme ?? 'N/A'); ?></td>
+            <td>
+                <button class="pap-btn pap-btn-small pap-view-details" data-site-id="<?php echo esc_html($site->id); ?>">
+                    Details
+                </button>
+            </td>
+        </tr>
+    <?php
+    }
+
+    /**
+     * Enhanced render_sites_tab method
+     */
     private function render_sites_tab($product_id)
     {
         global $wpdb;
 
-        // Get current page, search, and order parameters
-        $current_page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
+        // Get current parameters
         $search = isset($_GET['search']) ? sanitize_text_field($_GET['search']) : '';
-        $order_by = isset($_GET['orderby']) ? sanitize_text_field($_GET['orderby']) : 'last_seen';
+        $order_by = isset($_GET['orderby']) ? sanitize_text_field($_GET['orderby']) : 'activation_date';
         $order = isset($_GET['order']) ? sanitize_text_field($_GET['order']) : 'DESC';
-        $tab = isset($_GET['site_tab']) ? sanitize_text_field($_GET['site_tab']) : 'client';
+        $tab = isset($_GET['site_tab']) ? sanitize_text_field($_GET['site_tab']) : 'all';
 
-        // Validate order_by parameter
-        $valid_order_by = ['status', 'multisite', 'wp_version', 'php_version', 'days_active', 'last_seen'];
+        // Validate parameters
+        $valid_order_by = ['status', 'multisite', 'wp_version', 'php_version', 'days_active', 'activation_date', 'site_url'];
         if (!in_array($order_by, $valid_order_by)) {
-            $order_by = 'last_seen';
+            $order_by = 'activation_date';
         }
-
-        // Validate order parameter
         $order = strtoupper($order) === 'ASC' ? 'ASC' : 'DESC';
-
-        $per_page = 20;
-        $offset = ($current_page - 1) * $per_page;
 
         // Build WHERE clause
         $where_conditions = ["product_id = %s"];
@@ -256,51 +372,41 @@ class ProductAnalyticsPro_dashboard
             $order_clause = "ORDER BY $order_by $order";
         }
 
-        // Get ALL sites matching the base criteria (without pagination)
+        // Get all sites
         $all_sites_query = "SELECT * FROM {$wpdb->prefix}pap_analytics $where_clause $order_clause";
         $all_sites = $wpdb->get_results($wpdb->prepare($all_sites_query, $where_params));
 
-        // Filter sites based on tab (own vs client)
+        // Get settings instance
         $settings = new ProductAnalyticsPro_settings();
-        $filtered_sites = [];
 
-        foreach ($all_sites as $site) {
-            $is_own = $settings->is_own_site($site->site_url);
-            if (($tab === 'own' && $is_own) || ($tab === 'client' && !$is_own)) {
-                $filtered_sites[] = $site;
-            }
-        }
+        // Get tab counts
+        $tab_counts = $this->get_tab_counts($all_sites, $settings);
 
-        // Calculate pagination based on filtered results
-        $total_filtered_sites = count($filtered_sites);
-        $total_pages = ceil($total_filtered_sites / $per_page);
+        // Filter sites based on tab
+        $filtered_sites = $this->get_filtered_sites_by_tab($all_sites, $tab, $settings);
 
-        // Apply pagination to filtered results
-        $paginated_sites = array_slice($filtered_sites, $offset, $per_page);
-
-        // Get counts for tab labels
-        $own_count = 0;
-        $client_count = 0;
-        foreach ($all_sites as $site) {
-            $is_own = $settings->is_own_site($site->site_url);
-            if ($is_own) {
-                $own_count++;
-            } else {
-                $client_count++;
-            }
-        }
+        // Group sites by date
+        $date_groups = $this->get_sites_by_date_groups($filtered_sites);
 
     ?>
         <div class="pap-sites-container">
-            <!-- Tab Navigation -->
+            <!-- Enhanced Tab Navigation -->
             <div class="pap-tab-nav">
-                <a href="<?php echo esc_url(add_query_arg(['site_tab' => 'own', 'paged' => 1])); ?>"
-                    class="pap-tab-link <?php echo $tab === 'own' ? 'active' : ''; ?>">
-                    Own Sites (<?php echo $own_count; ?>)
+                <a href="<?php echo esc_url(add_query_arg(['site_tab' => 'all'])); ?>"
+                    class="pap-tab-link <?php echo $tab === 'all' ? 'active' : ''; ?>">
+                    All Sites (<?php echo $tab_counts['all']; ?>)
                 </a>
-                <a href="<?php echo esc_url(add_query_arg(['site_tab' => 'client', 'paged' => 1])); ?>"
+                <a href="<?php echo esc_url(add_query_arg(['site_tab' => 'own'])); ?>"
+                    class="pap-tab-link <?php echo $tab === 'own' ? 'active' : ''; ?>">
+                    Own Sites (<?php echo $tab_counts['own']; ?>)
+                </a>
+                <a href="<?php echo esc_url(add_query_arg(['site_tab' => 'client'])); ?>"
                     class="pap-tab-link <?php echo $tab === 'client' ? 'active' : ''; ?>">
-                    Client Sites (<?php echo $client_count; ?>)
+                    Client Sites (<?php echo $tab_counts['client']; ?>)
+                </a>
+                <a href="<?php echo esc_url(add_query_arg(['site_tab' => 'pro'])); ?>"
+                    class="pap-tab-link <?php echo $tab === 'pro' ? 'active' : ''; ?>">
+                    Pro Sites (<?php echo $tab_counts['pro']; ?>)
                 </a>
             </div>
 
@@ -315,152 +421,111 @@ class ProductAnalyticsPro_dashboard
                         value="<?php echo esc_attr($search); ?>" />
                     <button type="submit" class="pap-btn pap-btn-primary">Search</button>
                     <?php if (!empty($search)): ?>
-                        <a href="<?php echo esc_url(remove_query_arg(['search', 'paged'])); ?>"
+                        <a href="<?php echo esc_url(remove_query_arg(['search'])); ?>"
                             class="pap-btn pap-btn-secondary">Clear</a>
                     <?php endif; ?>
                 </form>
             </div>
 
-            <!-- Sites Table -->
-            <div class="pap-sites-table">
-                <table class="pap-table">
-                    <thead>
-                        <tr>
-                            <th>
-                                <a href="<?php echo esc_url(add_query_arg([
-                                                'orderby' => 'site_url',
-                                                'order' => ($order_by === 'site_url' && $order === 'ASC') ? 'DESC' : 'ASC',
-                                                'paged' => 1
-                                            ])); ?>">
-                                    Site URL
-                                    <?php if ($order_by === 'site_url'): ?>
-                                        <span class="pap-sort-indicator"><?php echo $order === 'ASC' ? '↑' : '↓'; ?></span>
-                                    <?php endif; ?>
-                                </a>
-                            </th>
-                            <th>
-                                <a href="<?php echo esc_url(add_query_arg([
-                                                'orderby' => 'status',
-                                                'order' => ($order_by === 'status' && $order === 'ASC') ? 'DESC' : 'ASC',
-                                                'paged' => 1
-                                            ])); ?>">
-                                    Status
-                                    <?php if ($order_by === 'status'): ?>
-                                        <span class="pap-sort-indicator"><?php echo $order === 'ASC' ? '↑' : '↓'; ?></span>
-                                    <?php endif; ?>
-                                </a>
-                            </th>
-                            <th>
-                                <a href="<?php echo esc_url(add_query_arg([
-                                                'orderby' => 'multisite',
-                                                'order' => ($order_by === 'multisite' && $order === 'ASC') ? 'DESC' : 'ASC',
-                                                'paged' => 1
-                                            ])); ?>">
-                                    Multisite
-                                    <?php if ($order_by === 'multisite'): ?>
-                                        <span class="pap-sort-indicator"><?php echo $order === 'ASC' ? '↑' : '↓'; ?></span>
-                                    <?php endif; ?>
-                                </a>
-                            </th>
-                            <th>
-                                <a href="<?php echo esc_url(add_query_arg([
-                                                'orderby' => 'wp_version',
-                                                'order' => ($order_by === 'wp_version' && $order === 'ASC') ? 'DESC' : 'ASC',
-                                                'paged' => 1
-                                            ])); ?>">
-                                    WordPress
-                                    <?php if ($order_by === 'wp_version'): ?>
-                                        <span class="pap-sort-indicator"><?php echo $order === 'ASC' ? '↑' : '↓'; ?></span>
-                                    <?php endif; ?>
-                                </a>
-                            </th>
-                            <th>
-                                <a href="<?php echo esc_url(add_query_arg([
-                                                'orderby' => 'php_version',
-                                                'order' => ($order_by === 'php_version' && $order === 'ASC') ? 'DESC' : 'ASC',
-                                                'paged' => 1
-                                            ])); ?>">
-                                    PHP
-                                    <?php if ($order_by === 'php_version'): ?>
-                                        <span class="pap-sort-indicator"><?php echo $order === 'ASC' ? '↑' : '↓'; ?></span>
-                                    <?php endif; ?>
-                                </a>
-                            </th>
-                            <th>
-                                <a href="<?php echo esc_url(add_query_arg([
-                                                'orderby' => 'days_active',
-                                                'order' => ($order_by === 'days_active' && $order === 'ASC') ? 'DESC' : 'ASC',
-                                                'paged' => 1
-                                            ])); ?>">
-                                    Days Active
-                                    <?php if ($order_by === 'days_active'): ?>
-                                        <span class="pap-sort-indicator"><?php echo $order === 'ASC' ? '↑' : '↓'; ?></span>
-                                    <?php endif; ?>
-                                </a>
-                            </th>
-                            <th>Active Theme</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (empty($paginated_sites)): ?>
-                            <tr>
-                                <td colspan="8" class="pap-no-results">
-                                    <?php echo empty($search) ? 'No sites found.' : 'No sites found matching your search.'; ?>
-                                </td>
-                            </tr>
-                        <?php else: ?>
-                            <?php foreach ($paginated_sites as $site): ?>
-                                <tr>
-                                    <td>
-                                        <a href="<?php echo esc_url($site->site_url); ?>" target="_blank" style="color: unset; text-decoration: none;"><?php echo esc_html($site->site_url); ?></a>
-                                        <?php if ($site->using_pro): ?>
-                                            <span class="pap-pro-badge">PRO</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <span class="pap-status pap-status-<?php echo esc_html($site->status); ?>">
-                                            <?php echo esc_html(ucfirst($site->status)); ?>
-                                        </span>
-                                    </td>
-                                    <td><?php echo $site->multisite ? 'Yes' : 'No'; ?></td>
-                                    <td><?php echo esc_html($site->wp_version); ?></td>
-                                    <td><?php echo esc_html($site->php_version); ?></td>
-                                    <td><?php echo esc_html($this->help->calculate_days_active($site->activation_date, $site->deactivation_date)); ?></td>
-                                    <td><?php echo esc_html($site->active_theme ?? 'N/A'); ?></td>
-                                    <td>
-                                        <button class="pap-btn pap-btn-small pap-view-details" data-site-id="<?php echo esc_html($site->id); ?>">
-                                            View Details
-                                        </button>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
+            <!-- Sites organized by date -->
+            <div class="pap-sites-by-date">
+                <?php if (empty($filtered_sites)): ?>
+                    <div class="pap-no-results">
+                        <?php echo empty($search) ? 'No sites found.' : 'No sites found matching your search.'; ?>
+                    </div>
+                <?php else: ?>
+
+                    <!-- Today's Sites -->
+                    <?php if (!empty($date_groups['today'])): ?>
+                        <div class="pap-date-group">
+                            <h3 class="pap-date-header">Today (<?php echo count($date_groups['today']); ?> sites)</h3>
+                            <div class="pap-sites-table">
+                                <table class="pap-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Site URL</th>
+                                            <th>Status</th>
+                                            <th>Multisite</th>
+                                            <th>WordPress</th>
+                                            <th>PHP</th>
+                                            <th>Days Active</th>
+                                            <th>Active Theme</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($date_groups['today'] as $site): ?>
+                                            <?php $this->render_site_row($site); ?>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
+                    <!-- Yesterday's Sites -->
+                    <?php if (!empty($date_groups['yesterday'])): ?>
+                        <div class="pap-date-group">
+                            <h3 class="pap-date-header">Yesterday (<?php echo count($date_groups['yesterday']); ?> sites)</h3>
+                            <div class="pap-sites-table">
+                                <table class="pap-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Site URL</th>
+                                            <th>Status</th>
+                                            <th>Multisite</th>
+                                            <th>WordPress</th>
+                                            <th>PHP</th>
+                                            <th>Days Active</th>
+                                            <th>Active Theme</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($date_groups['yesterday'] as $site): ?>
+                                            <?php $this->render_site_row($site); ?>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
+                    <!-- Other Dates -->
+                    <?php foreach ($date_groups['dates'] as $date => $sites): ?>
+                        <div class="pap-date-group">
+                            <h3 class="pap-date-header">
+                                <?php echo esc_html(date('F j, Y', strtotime($date))); ?>
+                                (<?php echo count($sites); ?> sites)
+                            </h3>
+                            <div class="pap-sites-table">
+                                <table class="pap-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Site URL</th>
+                                            <th>Status</th>
+                                            <th>Multisite</th>
+                                            <th>WordPress</th>
+                                            <th>PHP</th>
+                                            <th>Days Active</th>
+                                            <th>Active Theme</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($sites as $site): ?>
+                                            <?php $this->render_site_row($site); ?>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
             </div>
-
-            <!-- Pagination -->
-            <?php if ($total_pages > 1): ?>
-                <div class="pap-pagination">
-                    <?php if ($current_page > 1): ?>
-                        <a href="<?php echo esc_url(add_query_arg(['paged' => $current_page - 1])); ?>"
-                            class="pap-btn pap-btn-secondary">« Previous</a>
-                    <?php endif; ?>
-
-                    <span class="pap-pagination-info">
-                        Page <?php echo $current_page; ?> of <?php echo $total_pages; ?>
-                        (<?php echo $total_filtered_sites; ?> <?php echo $tab; ?> sites)
-                    </span>
-
-                    <?php if ($current_page < $total_pages): ?>
-                        <a href="<?php echo esc_url(add_query_arg(['paged' => $current_page + 1])); ?>"
-                            class="pap-btn pap-btn-secondary">Next »</a>
-                    <?php endif; ?>
-                </div>
-            <?php endif; ?>
         </div>
 
+        <!-- Enhanced Styles -->
         <style>
             .pap-sites-container {
                 margin-top: 20px;
@@ -473,17 +538,24 @@ class ProductAnalyticsPro_dashboard
 
             .pap-tab-link {
                 display: inline-block;
-                padding: 10px 20px;
+                padding: 12px 20px;
                 text-decoration: none;
                 color: #666;
-                border-bottom: 2px solid transparent;
+                border-bottom: 3px solid transparent;
                 margin-right: 10px;
+                transition: all 0.3s ease;
+            }
+
+            .pap-tab-link:hover {
+                color: #0073aa;
+                background-color: #f9f9f9;
             }
 
             .pap-tab-link.active {
                 color: #0073aa;
                 border-bottom-color: #0073aa;
                 font-weight: bold;
+                background-color: #f9f9f9;
             }
 
             .pap-table-controls {
@@ -503,21 +575,47 @@ class ProductAnalyticsPro_dashboard
                 border-radius: 4px;
             }
 
-            .pap-table th a {
-                text-decoration: none;
-                color: #333;
-                display: flex;
-                align-items: center;
-                gap: 5px;
+            .pap-date-group {
+                margin-bottom: 30px;
             }
 
-            .pap-table th a:hover {
-                color: #0073aa;
+            .pap-date-header {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 12px 20px;
+                margin: 0 0 10px 0;
+                border-radius: 6px;
+                font-size: 16px;
+                font-weight: 600;
             }
 
-            .pap-sort-indicator {
-                font-size: 12px;
-                color: #0073aa;
+            .pap-sites-table {
+                background: white;
+                border-radius: 6px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                overflow: hidden;
+            }
+
+            .pap-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+
+            .pap-table th {
+                background: #f8f9fa;
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid #dee2e6;
+                font-weight: 600;
+            }
+
+            .pap-table td {
+                padding: 12px;
+                border-bottom: 1px solid #dee2e6;
+            }
+
+            .pap-table tr:last-child td {
+                border-bottom: none;
             }
 
             .pap-pro-badge {
@@ -525,60 +623,10 @@ class ProductAnalyticsPro_dashboard
                 color: #333;
                 padding: 2px 8px;
                 border-radius: 12px;
-                font-size: 12px;
+                font-size: 11px;
                 font-weight: 700;
                 letter-spacing: 0.5px;
-            }
-
-            .pap-no-results {
-                text-align: center;
-                color: #666;
-                font-style: italic;
-                padding: 20px;
-            }
-
-            .pap-pagination {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-top: 20px;
-                padding: 15px 0;
-                border-top: 1px solid #ddd;
-            }
-
-            .pap-pagination-info {
-                color: #666;
-                font-size: 14px;
-            }
-
-            .pap-btn {
-                padding: 8px 16px;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-                text-decoration: none;
-                display: inline-block;
-                font-size: 14px;
-            }
-
-            .pap-btn-primary {
-                background: #0073aa;
-                color: white;
-            }
-
-            .pap-btn-secondary {
-                background: #f7f7f7;
-                color: #333;
-                border: 1px solid #ddd;
-            }
-
-            .pap-btn-small {
-                padding: 5px 10px;
-                font-size: 12px;
-            }
-
-            .pap-btn:hover {
-                opacity: 0.9;
+                margin-left: 8px;
             }
         </style>
     <?php
@@ -588,19 +636,58 @@ class ProductAnalyticsPro_dashboard
     {
         global $wpdb;
         $stats = $this->pap_db_calls->get_detailed_stats($product_id);
-        $deactivations = $wpdb->get_results($wpdb->prepare("
-            SELECT * FROM {$wpdb->prefix}pap_analytics 
-            WHERE product_id = %s AND status = 'inactive' AND deactivation_date IS NOT NULL
-            ORDER BY deactivation_date DESC
-        ", $product_id));
+
+        // Get current parameters for filtering
+        $search = isset($_GET['search']) ? sanitize_text_field($_GET['search']) : '';
+        $order_by = isset($_GET['orderby']) ? sanitize_text_field($_GET['orderby']) : 'deactivation_date';
+        $order = isset($_GET['order']) ? sanitize_text_field($_GET['order']) : 'DESC';
+        $deactivation_tab = isset($_GET['deactivation_tab']) ? sanitize_text_field($_GET['deactivation_tab']) : 'all';
+
+        // Validate parameters
+        $valid_order_by = ['deactivation_date', 'site_url', 'deactivate_reason', 'days_active', 'active_theme'];
+        if (!in_array($order_by, $valid_order_by)) {
+            $order_by = 'deactivation_date';
+        }
+        $order = strtoupper($order) === 'ASC' ? 'ASC' : 'DESC';
+
+        // Build WHERE clause
+        $where_conditions = ["product_id = %s", "status = 'inactive'", "deactivation_date IS NOT NULL"];
+        $where_params = [$product_id];
+
+        if (!empty($search)) {
+            $where_conditions[] = "site_url LIKE %s";
+            $where_params[] = '%' . $wpdb->esc_like($search) . '%';
+        }
+
+        $where_clause = 'WHERE ' . implode(' AND ', $where_conditions);
+
+        // Special handling for days_active ordering
+        if ($order_by === 'days_active') {
+            $order_clause = "ORDER BY DATEDIFF(deactivation_date, activation_date) $order";
+        } else {
+            $order_clause = "ORDER BY $order_by $order";
+        }
+
+        // Get all deactivations
+        $all_deactivations_query = "SELECT * FROM {$wpdb->prefix}pap_analytics $where_clause $order_clause";
+        $all_deactivations = $wpdb->get_results($wpdb->prepare($all_deactivations_query, $where_params));
+
+        // Get settings instance
+        $settings = new ProductAnalyticsPro_settings();
+
+        // Get tab counts
+        $tab_counts = $this->get_deactivation_tab_counts($all_deactivations, $settings);
+
+        // Filter deactivations based on tab
+        $filtered_deactivations = $this->get_filtered_deactivations_by_tab($all_deactivations, $deactivation_tab, $settings);
+
+        // Group deactivations by date
+        $date_groups = $this->get_deactivations_by_date_groups($filtered_deactivations);
+
     ?>
         <div class="pap-deactivations">
-            <div class="pap-filters">
-                <input type="date" id="start_date" placeholder="Start Date">
-                <input type="date" id="end_date" placeholder="End Date">
-                <button class="pap-btn pap-btn-primary" id="apply_filters">Apply Filters</button>
-            </div>
 
+            <!-- Stats Cards -->
             <div class="pap-deactivation-stats">
                 <div class="pap-stat-card">
                     <div class="pap-stat-content">
@@ -649,29 +736,356 @@ class ProductAnalyticsPro_dashboard
                 </div>
             </div>
 
-            <div class="pap-deactivations-table">
-                <table class="pap-table">
-                    <thead>
-                        <tr>
-                            <th>Site URL</th>
-                            <th>Date</th>
-                            <th>Reason</th>
-                            <th>Days Used</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($deactivations as $deactivation): ?>
-                            <tr>
-                                <td><?php echo esc_html($deactivation->site_url); ?></td>
-                                <td><?php echo esc_html(gmdate('Y-m-d', strtotime($deactivation->deactivation_date))); ?></td>
-                                <td><?php echo esc_html($deactivation->deactivate_reason); ?></td>
-                                <td><?php echo esc_html($this->help->calculate_days_active($deactivation->activation_date, $deactivation->deactivation_date)); ?></td>
-                            </tr>
+            <!-- Search and Controls -->
+            <div class="pap-table-controls">
+                <form method="get" class="pap-search-form">
+                    <input type="hidden" name="page" value="<?php echo esc_attr($_GET['page'] ?? ''); ?>" />
+                    <input type="hidden" name="tab" value="<?php echo esc_attr($_GET['tab'] ?? ''); ?>" />
+                    <input type="hidden" name="product_id" value="<?php echo esc_attr($product_id); ?>" />
+                    <input type="hidden" name="deactivation_tab" value="<?php echo esc_attr($deactivation_tab); ?>" />
+                    <input type="search" name="search" placeholder="Search by website URL..."
+                        value="<?php echo esc_attr($search); ?>" />
+                    <button type="submit" class="pap-btn pap-btn-primary">Search</button>
+                    <?php if (!empty($search)): ?>
+                        <a href="<?php echo esc_url(remove_query_arg(['search'])); ?>"
+                            class="pap-btn pap-btn-secondary">Clear</a>
+                    <?php endif; ?>
+                </form>
+            </div>
+
+            <!-- Deactivations organized by date -->
+            <div class="pap-deactivations-container">
+                <div class="pap-deactivations-by-date">
+                    <?php if (empty($filtered_deactivations)): ?>
+                        <div class="pap-no-results">
+                            <?php echo empty($search) ? 'No deactivations found.' : 'No deactivations found matching your search.'; ?>
+                        </div>
+                    <?php else: ?>
+
+                        <!-- Today's Deactivations -->
+                        <?php if (!empty($date_groups['today'])): ?>
+                            <div class="pap-date-group">
+                                <h3 class="pap-date-header">Today (<?php echo count($date_groups['today']); ?> deactivations)</h3>
+                                <div class="pap-deactivations-table">
+                                    <table class="pap-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Site URL</th>
+                                                <th>Deactivation Date</th>
+                                                <th>Reason</th>
+                                                <th>Days Used</th>
+                                                <th>WordPress</th>
+                                                <th>PHP</th>
+                                                <th>Active Theme</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($date_groups['today'] as $deactivation): ?>
+                                                <?php $this->render_deactivation_row($deactivation); ?>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+
+                        <!-- Yesterday's Deactivations -->
+                        <?php if (!empty($date_groups['yesterday'])): ?>
+                            <div class="pap-date-group">
+                                <h3 class="pap-date-header">Yesterday (<?php echo count($date_groups['yesterday']); ?> deactivations)</h3>
+                                <div class="pap-deactivations-table">
+                                    <table class="pap-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Site URL</th>
+                                                <th>Deactivation Date</th>
+                                                <th>Reason</th>
+                                                <th>Days Used</th>
+                                                <th>WordPress</th>
+                                                <th>PHP</th>
+                                                <th>Active Theme</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($date_groups['yesterday'] as $deactivation): ?>
+                                                <?php $this->render_deactivation_row($deactivation); ?>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+
+                        <!-- Other Dates -->
+                        <?php foreach ($date_groups['dates'] as $date => $deactivations): ?>
+                            <div class="pap-date-group">
+                                <h3 class="pap-date-header">
+                                    <?php echo esc_html(date('F j, Y', strtotime($date))); ?>
+                                    (<?php echo count($deactivations); ?> deactivations)
+                                </h3>
+                                <div class="pap-deactivations-table">
+                                    <table class="pap-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Site URL</th>
+                                                <th>Deactivation Date</th>
+                                                <th>Reason</th>
+                                                <th>Days Used</th>
+                                                <th>WordPress</th>
+                                                <th>PHP</th>
+                                                <th>Active Theme</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($deactivations as $deactivation): ?>
+                                                <?php $this->render_deactivation_row($deactivation); ?>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         <?php endforeach; ?>
-                    </tbody>
-                </table>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
+
+        <!-- Enhanced Styles for Deactivations -->
+        <style>
+            .pap-sites-container {
+                margin-top: 20px;
+            }
+
+            .pap-tab-nav {
+                margin-bottom: 20px;
+                border-bottom: 1px solid #ddd;
+            }
+
+            .pap-tab-link {
+                display: inline-block;
+                padding: 12px 20px;
+                text-decoration: none;
+                color: #666;
+                border-bottom: 3px solid transparent;
+                margin-right: 10px;
+                transition: all 0.3s ease;
+            }
+
+            .pap-tab-link:hover {
+                color: #0073aa;
+                background-color: #f9f9f9;
+            }
+
+            .pap-tab-link.active {
+                color: #0073aa;
+                border-bottom-color: #0073aa;
+                font-weight: bold;
+                background-color: #f9f9f9;
+            }
+
+            .pap-table-controls {
+                margin-bottom: 20px;
+            }
+
+            .pap-search-form {
+                display: flex;
+                gap: 10px;
+                align-items: center;
+            }
+
+            .pap-search-form input[type="search"] {
+                min-width: 300px;
+                padding: 8px 12px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+
+            .pap-date-group {
+                margin-bottom: 30px;
+            }
+
+            .pap-date-header {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 12px 20px;
+                margin: 0 0 10px 0;
+                border-radius: 6px;
+                font-size: 16px;
+                font-weight: 600;
+            }
+
+            .pap-sites-table {
+                background: white;
+                border-radius: 6px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                overflow: hidden;
+            }
+
+            .pap-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+
+            .pap-table th {
+                background: #f8f9fa;
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid #dee2e6;
+                font-weight: 600;
+            }
+
+            .pap-table td {
+                padding: 12px;
+                border-bottom: 1px solid #dee2e6;
+            }
+
+            .pap-table tr:last-child td {
+                border-bottom: none;
+            }
+
+            .pap-pro-badge {
+                background: linear-gradient(135deg, #ffd700, #ffb700);
+                color: #333;
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.5px;
+                margin-left: 8px;
+            }
+        </style>
+    <?php
+    }
+
+    /**
+     * Render deactivation row
+     */
+    private function render_deactivation_row($deactivation)
+    {
+    ?>
+        <tr class="pap-deactivation-row">
+            <td>
+                <a href="<?php echo esc_url($deactivation->site_url); ?>" target="_blank" style="color: unset; text-decoration: none;">
+                    <?php echo esc_html($deactivation->site_url); ?>
+                </a>
+                <?php if ($deactivation->using_pro): ?>
+                    <span class="pap-pro-badge">PRO</span>
+                <?php endif; ?>
+            </td>
+            <td><?php echo esc_html(date('Y-m-d H:i', strtotime($deactivation->deactivation_date))); ?></td>
+            <td>
+                <span class="pap-reason-badge" title="<?php echo esc_attr($deactivation->deactivate_reason); ?>">
+                    <?php echo esc_html($deactivation->deactivate_reason ?: 'No reason provided'); ?>
+                </span>
+            </td>
+            <td>
+                <span class="pap-days-used">
+                    <?php echo esc_html($this->help->calculate_days_active($deactivation->activation_date, $deactivation->deactivation_date)); ?>
+                </span>
+            </td>
+            <td><?php echo esc_html($deactivation->wp_version); ?></td>
+            <td><?php echo esc_html($deactivation->php_version); ?></td>
+            <td><?php echo esc_html($deactivation->active_theme ?? 'N/A'); ?></td>
+            <td>
+                <button class="pap-btn pap-btn-small pap-view-details" data-site-id="<?php echo esc_html($deactivation->id); ?>">
+                    Details
+                </button>
+            </td>
+        </tr>
 <?php
+    }
+
+    /**
+     * Get deactivations filtered by tab type
+     */
+    private function get_filtered_deactivations_by_tab($all_deactivations, $tab, $settings)
+    {
+        $filtered_deactivations = [];
+
+        foreach ($all_deactivations as $deactivation) {
+            $is_own = $settings->is_own_site($deactivation->site_url);
+            $is_pro = $deactivation->using_pro;
+
+            switch ($tab) {
+                case 'own':
+                    if ($is_own) $filtered_deactivations[] = $deactivation;
+                    break;
+                case 'client':
+                    if (!$is_own) $filtered_deactivations[] = $deactivation;
+                    break;
+                case 'pro':
+                    if ($is_pro) $filtered_deactivations[] = $deactivation;
+                    break;
+                case 'all':
+                default:
+                    $filtered_deactivations[] = $deactivation;
+                    break;
+            }
+        }
+
+        return $filtered_deactivations;
+    }
+
+    /**
+     * Get deactivation tab counts
+     */
+    private function get_deactivation_tab_counts($all_deactivations, $settings)
+    {
+        $counts = [
+            'all' => count($all_deactivations),
+            'own' => 0,
+            'client' => 0,
+            'pro' => 0
+        ];
+
+        foreach ($all_deactivations as $deactivation) {
+            $is_own = $settings->is_own_site($deactivation->site_url);
+            $is_pro = $deactivation->using_pro;
+
+            if ($is_own) $counts['own']++;
+            else $counts['client']++;
+
+            if ($is_pro) $counts['pro']++;
+        }
+
+        return $counts;
+    }
+
+    /**
+     * Get deactivations by date groups
+     */
+    private function get_deactivations_by_date_groups($deactivations)
+    {
+        $groups = [
+            'today' => [],
+            'yesterday' => [],
+            'dates' => []
+        ];
+
+        $today = date('Y-m-d');
+        $yesterday = date('Y-m-d', strtotime('-1 day'));
+
+        foreach ($deactivations as $deactivation) {
+            $deactivation_date = date('Y-m-d', strtotime($deactivation->deactivation_date));
+
+            if ($deactivation_date === $today) {
+                $groups['today'][] = $deactivation;
+            } elseif ($deactivation_date === $yesterday) {
+                $groups['yesterday'][] = $deactivation;
+            } else {
+                if (!isset($groups['dates'][$deactivation_date])) {
+                    $groups['dates'][$deactivation_date] = [];
+                }
+                $groups['dates'][$deactivation_date][] = $deactivation;
+            }
+        }
+
+        // Sort dates in descending order
+        krsort($groups['dates']);
+
+        return $groups;
     }
 }
