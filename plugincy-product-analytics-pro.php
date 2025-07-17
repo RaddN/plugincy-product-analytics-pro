@@ -3,7 +3,7 @@
 /**
  * Plugin Name: Plugincy Product Analytics Pro
  * Description: Advanced product analytics and tracking system with REST API
- * Version: 1.0.4
+ * Version: 1.0.5
  * Author: plugincy
  * Author URI: https://plugincy.com
  * Text Domain: plugincy-product-analytics-pro
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('PAP_VERSION', '1.0.4');
+define('PAP_VERSION', '1.0.5');
 define('PAP_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PAP_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -75,7 +75,13 @@ class ProductAnalyticsPro
             'nonce' => wp_create_nonce('pap_nonce'),
             'rest_url' => rest_url('product-analytics/v1/'),
             'rest_nonce' => wp_create_nonce('wp_rest'),
-            'chartData' => $stats
+            'chartData' => $stats,
+            'messages' => array(
+                'confirm_delete' => __('Are you sure you want to delete this item?', 'product-analytics-pro'),
+                'loading' => __('Loading...', 'product-analytics-pro'),
+                'error' => __('An error occurred. Please try again.', 'product-analytics-pro'),
+                'success' => __('Operation completed successfully.', 'product-analytics-pro')
+            )
         ));
     }
 }

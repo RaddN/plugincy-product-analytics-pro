@@ -1015,3 +1015,246 @@ a.overlaybtn {
   letter-spacing: 0.5px;
   margin-left: 8px;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* Modal Styles for Product Analytics Pro */
+
+.pap-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+}
+
+.pap-modal-site {
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    max-width: 600px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+}
+
+.pap-modal-site-small {
+    max-width: 400px;
+}
+
+.pap-modal-site-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e1e1e1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #f8f9fa;
+    border-radius: 8px 8px 0 0;
+}
+
+.pap-modal-site-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+}
+
+.pap-modal-site-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.pap-modal-site-close:hover {
+    background-color: #e1e1e1;
+    color: #333;
+}
+
+.pap-modal-site-body {
+    padding: 24px;
+}
+
+.pap-form-group {
+    margin-bottom: 20px;
+}
+
+.pap-form-group:last-child {
+    margin-bottom: 0;
+}
+
+.pap-form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
+}
+
+.pap-form-group input,
+.pap-form-group select,
+.pap-form-group textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+    box-sizing: border-box;
+}
+
+.pap-form-group input:focus,
+.pap-form-group select:focus,
+.pap-form-group textarea:focus {
+    outline: none;
+    border-color: #0073aa;
+    box-shadow: 0 0 0 2px rgba(0, 115, 170, 0.1);
+}
+
+.pap-form-group input[readonly] {
+    background-color: #f8f9fa;
+    color: #666;
+    cursor: not-allowed;
+}
+
+.pap-form-group textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.pap-form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #e1e1e1;
+}
+
+.pap-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+    min-width: 100px;
+    justify-content: center;
+}
+
+.pap-btn-primary {
+    background-color: #0073aa;
+    color: white;
+}
+
+.pap-btn-primary:hover {
+    background-color: #005a87;
+}
+
+.pap-btn-secondary {
+    background-color: #f1f1f1;
+    color: #333;
+    border: 1px solid #ddd;
+}
+
+.pap-btn-secondary:hover {
+    background-color: #e1e1e1;
+}
+
+.pap-btn-danger {
+    background-color: #dc3545;
+    color: white;
+}
+
+.pap-btn-danger:hover {
+    background-color: #c82333;
+}
+
+.pap-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.pap-btn-small {
+    padding: 6px 12px;
+    font-size: 12px;
+    min-width: auto;
+}
+
+/* Loading indicator */
+.pap-loading {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 20px;
+    border-radius: 4px;
+    z-index: 10001;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .pap-modal-site {
+        width: 95%;
+        margin: 20px;
+    }
+    
+    .pap-modal-site-header,
+    .pap-modal-site-body {
+        padding: 16px;
+    }
+    
+    .pap-form-actions {
+        flex-direction: column;
+    }
+    
+    .pap-btn {
+        width: 100%;
+    }
+}

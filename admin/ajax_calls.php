@@ -1,4 +1,11 @@
 <?php
+// ajax_calls.php
+/**
+ * Plugincy Product Analytics Pro
+ * AJAX handler for product analytics operations
+ *
+ * @package Plugincy_Product_Analytics_Pro
+ */
 // Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
@@ -13,7 +20,8 @@ class ProductAnalyticsPro_ajax
         add_action('wp_ajax_pap_get_product', array($this, 'ajax_get_product_details'));
         add_action('wp_ajax_pap_update_product', array($this, 'ajax_update_product'));
         add_action('wp_ajax_pap_delete_product', array($this, 'ajax_delete_product'));
-        
+        add_action('wp_ajax_pap_update_site', array($this, 'ajax_update_site'));
+        add_action('wp_ajax_pap_delete_site', array($this, 'ajax_delete_site'));
     }
 
     public function init()
@@ -216,6 +224,150 @@ class ProductAnalyticsPro_ajax
         } catch (Exception $e) {
             $wpdb->query('ROLLBACK');
             wp_send_json_error(array('message' => 'Error deleting product: ' . $e->getMessage()), 500);
+        }
+    }
+
+    public function ajax_update_site()
+    {
+        check_ajax_referer('pap_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        if (empty($_POST['site_id'])) {
+            wp_send_json_error(array('message' => 'Missing site_id'), 400);
+        }
+
+        global $wpdb;
+        $site_id = intval($_POST['site_id']);
+
+        // Sanitize and validate input data
+        $site_url = isset($_POST['site_url']) ? esc_url_raw(wp_unslash($_POST['site_url'])) : '';
+        $product_id = isset($_POST['product_id']) ? sanitize_text_field(wp_unslash($_POST['product_id'])) : '';
+        $status = isset($_POST['status']) ? sanitize_text_field(wp_unslash($_POST['status'])) : 'active';
+        $wp_version = isset($_POST['wp_version']) ? sanitize_text_field(wp_unslash($_POST['wp_version'])) : '';
+        $php_version = isset($_POST['php_version']) ? sanitize_text_field(wp_unslash($_POST['php_version'])) : '';
+        $active_theme = isset($_POST['active_theme']) ? sanitize_text_field(wp_unslash($_POST['active_theme'])) : '';
+        $multisite = isset($_POST['multisite']) ? intval($_POST['multisite']) : 0;
+        $using_pro = isset($_POST['using_pro']) ? intval($_POST['using_pro']) : 0;
+        $other_plugins = isset($_POST['other_plugins']) ? wp_json_encode(wp_unslash($_POST['other_plugins'])) : array();
+        $deactivate_reason = isset($_POST['deactivate_reason']) ? sanitize_text_field(wp_unslash($_POST['deactivate_reason'])) : '';
+        $license_key = isset($_POST['license_key']) ? sanitize_text_field(wp_unslash($_POST['license_key'])) : '';
+        $location = isset($_POST['location']) ? sanitize_text_field(wp_unslash($_POST['location'])) : '';
+        $mysql_version = isset($_POST['mysql_version']) ? sanitize_text_field(wp_unslash($_POST['mysql_version'])) : '';
+        $plugin_version = isset($_POST['plugin_version']) ? sanitize_text_field(wp_unslash($_POST['plugin_version'])) : '';
+        $server_software = isset($_POST['server_software']) ? sanitize_text_field(wp_unslash($_POST['server_software'])) : '';
+
+        // Validate required fields
+        if (empty($site_url) || empty($product_id)) {
+            wp_send_json_error(array('message' => 'Site URL and Product ID are required'), 400);
+        }
+
+        // Validate status
+        if (!in_array($status, array('active', 'inactive', 'pending'))) {
+            $status = 'active';
+        }
+
+        // Check if site exists
+        $existing_site = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$wpdb->prefix}pap_analytics WHERE id = %d",
+            $site_id
+        ));
+
+        if (!$existing_site) {
+            wp_send_json_error(array('message' => 'Site not found'), 404);
+        }
+
+        // Prepare update data
+        $update_data = array(
+            'site_url' => $site_url,
+            'product_id' => $product_id,
+            'status' => $status,
+            'wp_version' => $wp_version,
+            'php_version' => $php_version,
+            'active_theme' => $active_theme,
+            'multisite' => $multisite,
+            'using_pro' => $using_pro,
+            'other_plugins' => $other_plugins,
+            'deactivate_reason' => $deactivate_reason,
+            'license_key' => $license_key,
+            'location' => $location,
+            'mysql_version' => $mysql_version,
+            'plugin_version' => $plugin_version,
+            'server_software' => $server_software,
+        );
+
+        // Update the site
+        $result = $wpdb->update(
+            $wpdb->prefix . 'pap_analytics',
+            $update_data,
+            array('id' => $site_id),
+            array('%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s'),
+            array('%d')
+        );
+
+        if ($wpdb->last_error) {
+            wp_send_json_error(array('message' => 'Database error: ' . $wpdb->last_error), 500);
+        }
+
+        if ($result !== false) {
+            wp_send_json_success(array(
+                'message' => 'Site updated successfully',
+                'rows_affected' => $result,
+                'data' => $update_data
+            ));
+        } else {
+            wp_send_json_error(array('message' => 'No changes were made or error updating site'), 500);
+        }
+    }
+
+    /**
+     * AJAX handler for deleting a site
+     */
+    public function ajax_delete_site()
+    {
+        check_ajax_referer('pap_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        if (empty($_POST['site_id'])) {
+            wp_send_json_error(array('message' => 'Missing site_id'), 400);
+        }
+
+        global $wpdb;
+        $site_id = intval($_POST['site_id']);
+
+        // Check if site exists
+        $site = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$wpdb->prefix}pap_analytics WHERE id = %d",
+            $site_id
+        ));
+
+        if (!$site) {
+            wp_send_json_error(array('message' => 'Site not found'), 404);
+        }
+
+        // Delete the site
+        $result = $wpdb->delete(
+            $wpdb->prefix . 'pap_analytics',
+            array('id' => $site_id),
+            array('%d')
+        );
+
+        if ($wpdb->last_error) {
+            wp_send_json_error(array('message' => 'Database error: ' . $wpdb->last_error), 500);
+        }
+
+        if ($result !== false) {
+            wp_send_json_success(array(
+                'message' => 'Site deleted successfully',
+                'deleted_site' => $site->site_url
+            ));
+        } else {
+            wp_send_json_error(array('message' => 'Error deleting site'), 500);
         }
     }
 }

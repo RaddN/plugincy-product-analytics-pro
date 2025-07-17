@@ -1675,3 +1675,315 @@
     window.PAP = PAP;
 
 })(jQuery);
+
+
+
+
+
+
+
+
+// Site management JavaScript for Product Analytics Pro
+jQuery(document).ready(function($) {
+    
+    // Site Edit Modal Functions
+    const SiteManager = {
+        
+        // Initialize event handlers
+        init: function() {
+            this.bindEvents();
+        },
+        
+        // Bind click events to edit and delete buttons
+        bindEvents: function() {
+            $(document).on('click', '.pap-btn-edit', this.handleEditClick);
+            $(document).on('click', '.pap-btn-delete', this.handleDeleteClick);
+            $(document).on('click', '.pap-modal-site-close', this.closeModal);
+            $(document).on('click', '.pap-modal-overlay', function(e) {
+                if (e.target === this) {
+                    SiteManager.closeModal();
+                }
+            });
+        },
+        
+        // Handle edit button click
+        handleEditClick: function(e) {
+            e.preventDefault();
+            const siteId = $(this).data('site-id');
+            SiteManager.getSiteDetails(siteId);
+        },
+        
+        // Handle delete button click
+        handleDeleteClick: function(e) {
+            e.preventDefault();
+            const siteId = $(this).data('site-id');
+            SiteManager.showDeleteConfirmation(siteId);
+        },
+        
+        // Get site details via AJAX
+        getSiteDetails: function(siteId) {
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'pap_get_site_details',
+                    site_id: siteId,
+                    nonce: pap_ajax.nonce
+                },
+                beforeSend: function() {
+                    // Show loading indicator
+                    $('body').append('<div class="pap-loading">Loading...</div>');
+                },
+                success: function(response) {
+                    $('.pap-loading').remove();
+                    if (response.success) {
+                        SiteManager.renderEditModal(response.data);
+                    } else {
+                        alert('Error: ' + response.data.message);
+                    }
+                },
+                error: function() {
+                    $('.pap-loading').remove();
+                    alert('Error loading site details');
+                }
+            });
+        },
+        
+        // Render edit modal
+        renderEditModal: function(site) {
+
+            console.log('Site Details:', site); // Debugging line
+            const otherPlugins = site.other_plugins ? JSON.stringify(site.other_plugins, null, 2) : '';
+            
+            const modal = `
+                <div class="pap-modal-overlay" id="editSiteModal">
+                    <div class="pap-modal-site">
+                        <div class="pap-modal-site-header">
+                            <h3>Edit Site Details</h3>
+                            <button class="pap-modal-site-close">&times;</button>
+                        </div>
+                        <div class="pap-modal-site-body">
+                            <form id="editSiteForm">
+                                <input type="hidden" name="site_id" value="${site.id}">
+                                
+                                <div class="pap-form-group">
+                                    <label for="edit_site_url">Site URL</label>
+                                    <input type="url" id="edit_site_url" name="site_url" value="${site.site_url}" required>
+                                </div>
+                                
+                                <div class="pap-form-group">
+                                    <label for="edit_product_id">Product ID</label>
+                                    <input type="text" id="edit_product_id" name="product_id" value="${site.product_id}" required>
+                                </div>
+                                
+                                <div class="pap-form-group">
+                                    <label for="edit_status">Status</label>
+                                    <select id="edit_status" name="status">
+                                        <option value="active" ${site.status === 'active' ? 'selected' : ''}>Active</option>
+                                        <option value="inactive" ${site.status === 'inactive' ? 'selected' : ''}>Inactive</option>
+                                        <option value="pending" ${site.status === 'pending' ? 'selected' : ''}>Pending</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="pap-form-group">
+                                    <label for="edit_wp_version">WordPress Version</label>
+                                    <input type="text" id="edit_wp_version" name="wp_version" value="${site.wp_version}">
+                                </div>
+                                
+                                <div class="pap-form-group">
+                                    <label for="edit_php_version">PHP Version</label>
+                                    <input type="text" id="edit_php_version" name="php_version" value="${site.php_version}">
+                                </div>
+                                
+                                <div class="pap-form-group">
+                                    <label for="edit_active_theme">Active Theme</label>
+                                    <input type="text" id="edit_active_theme" name="active_theme" value="${site.active_theme || ''}">
+                                </div>
+                                
+                                <div class="pap-form-group">
+                                    <label for="edit_multisite">Multisite</label>
+                                    <select id="edit_multisite" name="multisite">
+                                        <option value="0" ${site.multisite === 0 ? 'selected' : ''}>No</option>
+                                        <option value="1" ${site.multisite === 1 ? 'selected' : ''}>Yes</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="pap-form-group">
+                                    <label for="edit_using_pro">Using Pro</label>
+                                    <select id="edit_using_pro" name="using_pro">
+                                        <option value="0" ${site.using_pro === 0 ? 'selected' : ''}>No</option>
+                                        <option value="1" ${site.using_pro === 1 ? 'selected' : ''}>Yes</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="pap-form-group">
+                                    <label for="edit_other_plugins">Other Plugins (comma separated)</label>
+                                    <textarea id="edit_other_plugins" name="other_plugins" rows="3">${otherPlugins}</textarea>
+                                </div>
+
+                                <div class="pap-form-group">
+                                    <label for="edit_deactivate_reason">Deactivate Reason</label>
+                                    <input type="text" id="edit_deactivate_reason" name="deactivate_reason" value="${site.deactivate_reason || ''}">
+                                </div>
+
+                                <div class="pap-form-group">
+                                    <label for="edit_license_key">License Key</label>
+                                    <input type="text" id="edit_license_key" name="license_key" value="${site.license_key || ''}">
+                                </div>
+
+                                <div class="pap-form-group">
+                                    <label for="edit_location">Location</label>
+                                    <input type="text" id="edit_location" name="location" value="${site.location || ''}">
+                                </div>
+
+                                <div class="pap-form-group">
+                                    <label for="edit_mysql_version">MySQL Version</label>
+                                    <input type="text" id="edit_mysql_version" name="mysql_version" value="${site.mysql_version || ''}">
+                                </div>
+
+                                <div class="pap-form-group">
+                                    <label for="edit_plugin_version">Plugin Version</label>
+                                    <input type="text" id="edit_plugin_version" name="plugin_version" value="${site.plugin_version || ''}">
+                                </div>
+
+                                <div class="pap-form-group">
+                                    <label for="edit_server_software">Server Software</label>
+                                    <input type="text" id="edit_server_software" name="server_software" value="${site.server_software || ''}">
+                                </div>
+                                
+                                <div class="pap-form-actions">
+                                    <button type="submit" class="pap-btn pap-btn-primary">Update Site</button>
+                                    <button type="button" class="pap-btn pap-btn-secondary pap-modal-site-close">Cancel</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            $('body').append(modal);
+            
+            // Bind form submit event
+            $('#editSiteForm').on('submit', this.updateSite);
+        },
+        
+        // Update site via AJAX
+        updateSite: function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const ajaxData = {
+                action: 'pap_update_site',
+                nonce: pap_ajax.nonce
+            };
+            
+            // Convert FormData to regular object
+            for (let [key, value] of formData.entries()) {
+                // If updating other_plugins, try to parse JSON if possible
+                if (key === 'other_plugins') {
+                    ajaxData[key] = JSON.parse(value);
+                } else {
+                    ajaxData[key] = value;
+                }
+            }
+
+            console.log('AJAX Data:', ajaxData); // Debugging line
+            
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: ajaxData,
+                beforeSend: function() {
+                    $('#editSiteForm button[type="submit"]').prop('disabled', true).text('Updating...');
+                },
+                success: function(response) {
+                    if (response.success) {
+                        PAP.showNotification('Site updated successfully!', 'success');
+                        SiteManager.closeModal();
+                        setTimeout(function() {
+                            location.reload(); // Refresh the page to show updated data
+                        }, 1000);
+                    } else {
+                        PAP.showNotification('Error: ' + response.data.message, 'error');
+                    }
+                },
+                error: function() {
+                    PAP.showNotification('Error updating site', 'error');
+                },
+                complete: function() {
+                    $('#editSiteForm button[type="submit"]').prop('disabled', false).text('Update Site');
+                }
+            });
+        },
+        
+        // Show delete confirmation modal
+        showDeleteConfirmation: function(siteId) {
+            const modal = `
+                <div class="pap-modal-overlay" id="deleteSiteModal">
+                    <div class="pap-modal-site pap-modal-site-small">
+                        <div class="pap-modal-site-header">
+                            <h3>Delete Site</h3>
+                            <button class="pap-modal-site-close">&times;</button>
+                        </div>
+                        <div class="pap-modal-site-body">
+                            <p>Are you sure you want to delete this site? This action cannot be undone.</p>
+                            <div class="pap-form-actions">
+                                <button type="button" class="pap-btn pap-btn-danger" id="confirmDeleteSite" data-site-id="${siteId}">Delete</button>
+                                <button type="button" class="pap-btn pap-btn-secondary pap-modal-site-close">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            $('body').append(modal);
+            
+            // Bind delete confirmation
+            $('#confirmDeleteSite').on('click', this.deleteSite);
+        },
+        
+        // Delete site via AJAX
+        deleteSite: function(e) {
+            e.preventDefault();
+            const siteId = $(this).data('site-id');
+            
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'pap_delete_site',
+                    site_id: siteId,
+                    nonce: pap_ajax.nonce
+                },
+                beforeSend: function() {
+                    $('#confirmDeleteSite').prop('disabled', true).text('Deleting...');
+                },
+                success: function(response) {
+                    if (response.success) {
+                        PAP.showNotification('Site deleted successfully!', 'success');
+                        SiteManager.closeModal();
+                        $(`.pap-site-row[data-site-id="${siteId}"]`).fadeOut(300, function () {
+                            $(this).remove();
+                        });
+                    } else {
+                        PAP.showNotification('Error: ' + response.data.message, 'error');
+                    }
+                },
+                error: function() {
+                    PAP.showNotification('Error deleting site', 'error');
+                },
+                complete: function() {
+                    $('#confirmDeleteSite').prop('disabled', false).text('Delete');
+                }
+            });
+        },
+        
+        // Close modal
+        closeModal: function() {
+            $('.pap-modal-overlay').remove();
+        }
+    };
+    
+    // Initialize site manager
+    SiteManager.init();
+});
