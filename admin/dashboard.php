@@ -313,7 +313,7 @@ class ProductAnalyticsPro_dashboard
                 <?php endif; ?>
             </td>
             <?php if ($is_deactivation): ?>
-                <td><?php echo esc_html(date('Y-m-d g:i A', strtotime($site->deactivation_date))); ?></td>
+                <td><?php echo esc_html(date('g:i A', strtotime($site->deactivation_date))); ?></td>
                 <td>
                     <span class="pap-reason-badge" title="<?php echo esc_attr($site->deactivate_reason); ?>">
                         <?php echo esc_html($site->deactivate_reason ?: 'No reason provided'); ?>
@@ -330,6 +330,7 @@ class ProductAnalyticsPro_dashboard
                         <?php echo esc_html(ucfirst($site->status)); ?>
                     </span>
                 </td>
+                <td><?php echo esc_html(date('g:i A', strtotime($site->activation_date))); ?></td>
                 <td><?php echo $site->multisite ? 'Yes' : 'No'; ?></td>
                 <td><?php echo esc_html($this->help->calculate_days_active($site->activation_date, $site->deactivation_date)); ?></td>
             <?php endif; ?>
@@ -465,10 +466,11 @@ class ProductAnalyticsPro_dashboard
                                         <tr>
                                             <th>Site URL</th>
                                             <th>Status</th>
+                                            <th>Activation Time</th>
                                             <th>Multisite</th>
-                                            <th>WordPress</th>
-                                            <th>PHP</th>
                                             <th>Days Active</th>
+                                            <th>WordPress</th>
+                                            <th>PHP</th>                                            
                                             <th>Active Theme</th>
                                             <th>Actions</th>
                                         </tr>
@@ -493,10 +495,11 @@ class ProductAnalyticsPro_dashboard
                                         <tr>
                                             <th>Site URL</th>
                                             <th>Status</th>
+                                            <th>Activation Time</th>
                                             <th>Multisite</th>
+                                            <th>Days Active</th>
                                             <th>WordPress</th>
                                             <th>PHP</th>
-                                            <th>Days Active</th>
                                             <th>Active Theme</th>
                                             <th>Actions</th>
                                         </tr>
@@ -524,10 +527,11 @@ class ProductAnalyticsPro_dashboard
                                         <tr>
                                             <th>Site URL</th>
                                             <th>Status</th>
+                                            <th>Activation Time</th>
                                             <th>Multisite</th>
-                                            <th>WordPress</th>
-                                            <th>PHP</th>
                                             <th>Days Active</th>
+                                            <th>WordPress</th>
+                                            <th>PHP</th>                                            
                                             <th>Active Theme</th>
                                             <th>Actions</th>
                                         </tr>
@@ -686,7 +690,7 @@ class ProductAnalyticsPro_dashboard
                                         <thead>
                                             <tr>
                                                 <th>Site URL</th>
-                                                <th>Deactivation Date</th>
+                                                <th>Deactivation Time</th>
                                                 <th>Reason</th>
                                                 <th>Days Used</th>
                                                 <th>WordPress</th>

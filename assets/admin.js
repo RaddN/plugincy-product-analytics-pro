@@ -972,7 +972,6 @@
             // Initialize charts if Chart.js is available and chart elements exist
             if (typeof Chart === 'undefined') return;
             const data = pap_ajax.chartData;
-            console.log(data);
 
             // Common chart options
             const commonOptions = {
@@ -1751,8 +1750,6 @@ jQuery(document).ready(function($) {
         
         // Render edit modal
         renderEditModal: function(site) {
-
-            console.log('Site Details:', site); // Debugging line
             const otherPlugins = site.other_plugins ? JSON.stringify(site.other_plugins, null, 2) : '';
             
             const modal = `
@@ -1886,8 +1883,6 @@ jQuery(document).ready(function($) {
                     ajaxData[key] = value;
                 }
             }
-
-            console.log('AJAX Data:', ajaxData); // Debugging line
             
             $.ajax({
                 url: ajaxurl,
@@ -1962,7 +1957,8 @@ jQuery(document).ready(function($) {
                     if (response.success) {
                         PAP.showNotification('Site deleted successfully!', 'success');
                         SiteManager.closeModal();
-                        $(`.pap-site-row[data-site-id="${siteId}"]`).fadeOut(300, function () {
+                        // Remove the corresponding table row for the deleted site
+                        $(`.pap-btn-delete[data-site-id="${siteId}"]`).closest('tr').fadeOut(300, function () {
                             $(this).remove();
                         });
                     } else {
