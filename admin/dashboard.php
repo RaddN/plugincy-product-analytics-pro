@@ -1,4 +1,5 @@
 <?php
+// dashboard.php
 // Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
@@ -64,6 +65,37 @@ class ProductAnalyticsPro_dashboard
                         break;
                 }
                 ?>
+            </div>
+        </div>
+
+        <!-- Notes Modal -->
+        <div id="pap-notes-modal" class="pap-modal" style="display: none;">
+            <div class="pap-modal-content">
+                <div class="pap-modal-header">
+                    <h3>Site Notes</h3>
+                    <button class="pap-modal-close">&times;</button>
+                </div>
+                <div class="pap-modal-body">
+                    <form id="pap-notes-form">
+                        <input type="hidden" id="pap-notes-site-id" name="site_id">
+
+                        <div class="pap-form-group">
+                            <label for="pap-note-color">Note Icon Color</label>
+                            <input type="color" id="pap-note-color" name="note_color" class="pap-color-picker">
+                            <p class="description">Choose a color for the note icon that will appear next to the site URL</p>
+                        </div>
+
+                        <div class="pap-form-group">
+                            <label for="pap-note-comment">Note</label>
+                            <textarea id="pap-note-comment" name="note_comment" rows="5" class="pap-textarea"></textarea>
+                        </div>
+
+                        <div class="pap-form-actions">
+                            <button type="submit" class="pap-btn pap-btn-primary">Save Note</button>
+                            <button type="button" class="pap-btn pap-btn-secondary pap-modal-cancel">Cancel</button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     <?php
@@ -347,6 +379,10 @@ class ProductAnalyticsPro_dashboard
                 <button class="pap-btn pap-btn-small pap-btn-delete" data-site-id="<?php echo esc_html($site->id); ?>" title="Delete Site">
                     <span class="dashicons dashicons-trash"></span>
                 </button>
+                <button class="pap-btn pap-btn-small pap-btn-notes" data-site-id="<?php echo esc_html($site->id); ?>" title="Add Note" style="color: #fff; background: <?php echo isset($site->note_color) ? esc_attr($site->note_color) : '#868686'; ?>;">
+                    <span class="dashicons dashicons-admin-comments"></span>
+                    <?php echo isset($site->note_color) ? 1 : ''; ?>
+                </button>
             </td>
         </tr>
     <?php
@@ -470,7 +506,7 @@ class ProductAnalyticsPro_dashboard
                                             <th>Multisite</th>
                                             <th>Days Active</th>
                                             <th>WordPress</th>
-                                            <th>PHP</th>                                            
+                                            <th>PHP</th>
                                             <th>Active Theme</th>
                                             <th>Actions</th>
                                         </tr>
@@ -531,7 +567,7 @@ class ProductAnalyticsPro_dashboard
                                             <th>Multisite</th>
                                             <th>Days Active</th>
                                             <th>WordPress</th>
-                                            <th>PHP</th>                                            
+                                            <th>PHP</th>
                                             <th>Active Theme</th>
                                             <th>Actions</th>
                                         </tr>
@@ -771,6 +807,6 @@ class ProductAnalyticsPro_dashboard
                 </div>
             </div>
         </div>
-    <?php
+<?php
     }
 }

@@ -1983,3 +1983,86 @@ jQuery(document).ready(function($) {
     // Initialize site manager
     SiteManager.init();
 });
+
+
+
+
+
+
+
+
+
+
+
+jQuery(document).ready(function($) {
+    // Handle notes button click
+    $(document).on('click', '.pap-btn-notes', function(e) {
+        e.preventDefault();
+        var siteId = $(this).data('site-id');
+        
+        // Reset form
+        $('#pap-notes-form')[0].reset();
+        $('#pap-notes-site-id').val(siteId);
+        
+        // Get existing note
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'pap_get_site_note',
+                site_id: siteId,
+                nonce: pap_ajax.nonce
+            },
+            success: function(response) {
+                if (response.success) {
+                    $('#pap-note-color').val(response.data.note_color || '#3498db');
+                    $('#pap-note-comment').val(response.data.note_comment || '');
+                }
+                $('#pap-notes-modal').show();
+            },
+            error: function() {
+                alert('Error loading note data');
+            }
+        });
+    });
+    
+    // Handle notes form submission
+    $('#pap-notes-form').on('submit', function(e) {
+        e.preventDefault();
+        
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'pap_save_site_note',
+                site_id: $('#pap-notes-site-id').val(),
+                note_color: $('#pap-note-color').val(),
+                note_comment: $('#pap-note-comment').val(),
+                nonce: pap_ajax.nonce
+            },
+            success: function(response) {
+                if (response.success) {
+                    // Reload the page to show the updated note icon
+                    window.location.reload();
+                } else {
+                    alert('Error saving note: ' + response.data.message);
+                }
+            },
+            error: function() {
+                alert('Error saving note');
+            }
+        });
+    });
+    
+    // Close modal
+    $('.pap-modal-close, .pap-modal-cancel').on('click', function() {
+        $('#pap-notes-modal').hide();
+    });
+    
+    // Close modal when clicking outside
+    $(window).on('click', function(e) {
+        if ($(e.target).hasClass('pap-modal')) {
+            $('#pap-notes-modal').hide();
+        }
+    });
+});

@@ -9,7 +9,6 @@ class ProductAnalyticsPro_db
     public function __construct()
     {
         add_action('init', array($this, 'init'));
-        
     }
 
     public function init()
@@ -55,6 +54,8 @@ class ProductAnalyticsPro_db
             using_pro tinyint(1) DEFAULT 0,
             license_key varchar(255),
             last_seen datetime DEFAULT CURRENT_TIMESTAMP,
+            note_color varchar(7) DEFAULT NULL,
+            note_comment text DEFAULT NULL,
             PRIMARY KEY (id),
             KEY product_id (product_id)
         ) $charset_collate;";

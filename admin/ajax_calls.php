@@ -22,6 +22,8 @@ class ProductAnalyticsPro_ajax
         add_action('wp_ajax_pap_delete_product', array($this, 'ajax_delete_product'));
         add_action('wp_ajax_pap_update_site', array($this, 'ajax_update_site'));
         add_action('wp_ajax_pap_delete_site', array($this, 'ajax_delete_site'));
+        add_action('wp_ajax_pap_save_site_note', array($this, 'ajax_save_site_note'));
+        add_action('wp_ajax_pap_get_site_note', array($this, 'ajax_get_site_note'));
     }
 
     public function init()
@@ -368,6 +370,77 @@ class ProductAnalyticsPro_ajax
             ));
         } else {
             wp_send_json_error(array('message' => 'Error deleting site'), 500);
+        }
+    }
+
+    public function ajax_save_site_note()
+    {
+        check_ajax_referer('pap_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        if (empty($_POST['site_id'])) {
+            wp_send_json_error(array('message' => 'Missing site_id'), 400);
+        }
+
+        global $wpdb;
+        $site_id = intval($_POST['site_id']);
+        $note_color = isset($_POST['note_color']) ? sanitize_text_field($_POST['note_color']) : '';
+        $note_comment = isset($_POST['note_comment']) ? sanitize_textarea_field($_POST['note_comment']) : '';
+
+        // Update the site with note data
+        $result = $wpdb->update(
+            $wpdb->prefix . 'pap_analytics',
+            array(
+                'note_color' => $note_color,
+                'note_comment' => $note_comment
+            ),
+            array('id' => $site_id),
+            array('%s', '%s'),
+            array('%d')
+        );
+
+        if ($result !== false) {
+            wp_send_json_success(array(
+                'message' => 'Note saved successfully',
+                'note_color' => $note_color,
+                'note_comment' => $note_comment
+            ));
+        } else {
+            wp_send_json_error(array('message' => 'Error saving note'), 500);
+        }
+    }
+
+    /**
+     * AJAX handler for getting site notes
+     */
+    public function ajax_get_site_note()
+    {
+        check_ajax_referer('pap_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        if (empty($_POST['site_id'])) {
+            wp_send_json_error(array('message' => 'Missing site_id'), 400);
+        }
+
+        global $wpdb;
+        $site_id = intval($_POST['site_id']);
+
+        $site = $wpdb->get_row($wpdb->prepare(
+            "SELECT note_color, note_comment FROM {$wpdb->prefix}pap_analytics WHERE id = %d",
+            $site_id
+        ));
+
+        if ($site) {
+            wp_send_json_success(array(
+                'note_color' => $site->note_color,
+                'note_comment' => $site->note_comment
+            ));
+        } else {
+            wp_send_json_error(array('message' => 'Site not found'), 404);
         }
     }
 }
