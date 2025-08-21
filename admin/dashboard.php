@@ -69,7 +69,7 @@ class ProductAnalyticsPro_dashboard
         </div>
 
         <!-- Notes Modal -->
-        <div id="pap-notes-modal" class="pap-modal" style="display: none;">
+        <div id="pap-notes-modal" class="pap-modal-notes-overlay" style="display: none;">
             <div class="pap-modal-content">
                 <div class="pap-modal-header">
                     <h3>Site Notes</h3>
@@ -78,11 +78,19 @@ class ProductAnalyticsPro_dashboard
                 <div class="pap-modal-body">
                     <form id="pap-notes-form">
                         <input type="hidden" id="pap-notes-site-id" name="site_id">
-
+                        <!-- note type selection -->
                         <div class="pap-form-group">
-                            <label for="pap-note-color">Note Icon Color</label>
-                            <input type="color" id="pap-note-color" name="note_color" class="pap-color-picker">
-                            <p class="description">Choose a color for the note icon that will appear next to the site URL</p>
+                            <label for="pap-note-color">Note Type</label>
+                            <select id="pap-note-color" name="note_color">
+                                <option value="">Select Note Type</option>
+                                <option value="#00ff11">No Issues</option>
+                                <option value="#0033ff">Issues Fixed</option>
+                                <option value="#ff0000">Function Related Issues</option>
+                                <option value="#fb00ff">Style Related Problems</option>
+                                <option value="#00fdff">404 Not Found</option>
+                                <option value="#ffff00">Recheck Later</option>
+                                <option value="#000000">Using Others Plugin</option>
+                            </select>
                         </div>
 
                         <div class="pap-form-group">
@@ -379,7 +387,35 @@ class ProductAnalyticsPro_dashboard
                 <button class="pap-btn pap-btn-small pap-btn-delete" data-site-id="<?php echo esc_html($site->id); ?>" title="Delete Site">
                     <span class="dashicons dashicons-trash"></span>
                 </button>
-                <button class="pap-btn pap-btn-small pap-btn-notes" data-site-id="<?php echo esc_html($site->id); ?>" title="Add Note" style="color: #fff; background: <?php echo isset($site->note_color) ? esc_attr($site->note_color) : '#868686'; ?>;">
+                <?php
+                $notes_btn_title = 'Add Note';
+                if (isset($site->note_color)) {
+                    switch ($site->note_color) {
+                        case '#00ff11':
+                            $notes_btn_title = 'No Issues';
+                            break;
+                        case '#0033ff':
+                            $notes_btn_title = 'Issues Fixed';
+                            break;
+                        case '#ff0000':
+                            $notes_btn_title = 'Function Related Issues';
+                            break;
+                        case '#fb00ff':
+                            $notes_btn_title = 'Style Related Problems';
+                            break;
+                        case '#00fdff':
+                            $notes_btn_title = '404 Not Found';
+                            break;
+                        case '#ffff00':
+                            $notes_btn_title = 'Recheck Later';
+                            break;
+                        case '#000000':
+                            $notes_btn_title = 'Using Others Plugin';
+                            break;
+                    }
+                }
+                ?>
+                <button class="pap-btn pap-btn-small pap-btn-notes" data-site-id="<?php echo esc_html($site->id); ?>" title="<?php echo esc_attr($notes_btn_title); ?>" style="color: #fff; background: <?php echo isset($site->note_color) ? esc_attr($site->note_color) : '#868686'; ?>;">
                     <span class="dashicons dashicons-admin-comments"></span>
                     <?php echo isset($site->note_color) ? 1 : ''; ?>
                 </button>

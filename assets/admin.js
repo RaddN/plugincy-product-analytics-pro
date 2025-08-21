@@ -413,27 +413,7 @@
         </div>
 
         <style>
-            .pap-modal-overlay {
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: rgba(0, 0, 0, 0.6);
-                backdrop-filter: blur(1px);
-                z-index: 10000;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                opacity: 0;
-                animation: fadeIn 0.3s ease-out forwards;
-            }
-
-            @keyframes fadeIn {
-                to { opacity: 1; }
-            }
-
-            .pap-modal-header {
+            #siteDetailsModal .pap-modal-header {
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 color: white;
                 padding: 20px;
@@ -2015,7 +1995,8 @@ jQuery(document).ready(function($) {
             },
             success: function(response) {
                 if (response.success) {
-                    $('#pap-note-color').val(response.data.note_color || '#3498db');
+                    $('#pap-note-color').find('option').prop('selected', false);
+                    $('#pap-note-color').find(`option[value="${response.data.note_color || ''}"]`).prop('selected', true);
                     $('#pap-note-comment').val(response.data.note_comment || '');
                 }
                 $('#pap-notes-modal').show();
